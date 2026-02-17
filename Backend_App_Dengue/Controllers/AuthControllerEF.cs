@@ -687,6 +687,75 @@ namespace Backend_App_Dengue.Controllers
         }
 
         /// <summary>
+        /// Cambia la contraseña del usuario desde su perfil
+        /// </summary>
+        /// <param name="userId">ID del usuario</param>
+        /// <param name="request">Contraseña actual y nueva contraseña</param>
+        /// <returns>Confirmación de cambio de contraseña</returns>
+        /// <response code="200">Contraseña cambiada exitosamente</response>
+        /// <response code="400">Datos inválidos o contraseñas no coinciden</response>
+        /// <response code="401">Contraseña actual incorrecta</response>
+        /// <response code="404">Usuario no encontrado</response>
+        /// <response code="500">Error al cambiar contraseña</response>
+        [HttpPost]
+        [Route("changePassword/{userId}")]
+        [ProducesResponseType(200)]
+        [ProducesResponseType(400)]
+        [ProducesResponseType(401)]
+        [ProducesResponseType(404)]
+        [ProducesResponseType(500)]
+        [Consumes("application/json")]
+        public async Task<IActionResult> ChangePassword(int userId, [FromBody] ChangePasswordDto request)
+        {
+            if (request == null || string.IsNullOrEmpty(request.CurrentPassword) ||
+                string.IsNullOrEmpty(request.NewPassword) || string.IsNullOrEmpty(request.ConfirmPassword))
+            {
+                return BadRequest(new { message = "Todos los campos son requeridos" });
+            }
+
+            if (request.NewPassword != request.ConfirmPassword)
+            {
+                return BadRequest(new { message = "La nueva contraseña y su confirmación no coinciden" });
+            }
+
+            if (request.NewPassword.Length < 6)
+            {
+                return BadRequest(new { message = "La nueva contraseña debe tener al menos 6 caracteres" });
+            }
+
+            try
+            {
+                var user = await _userRepository.GetByIdAsync(userId);
+
+                if (user == null)
+                {
+                    return NotFound(new { message = "Usuario no encontrado" });
+                }
+
+                // Verificar contraseña actual con BCrypt
+                bool isValidPassword = BCrypt.Net.BCrypt.Verify(request.CurrentPassword, user.Password);
+
+                if (!isValidPassword)
+                {
+                    return Unauthorized(new { message = "La contraseña actual es incorrecta" });
+                }
+
+                // Hash de nueva contraseña con BCrypt
+                string hashedPassword = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+
+                // Actualizar contraseña
+                user.Password = hashedPassword;
+                await _userRepository.UpdateAsync(user);
+
+                return Ok(new { message = "Contraseña actualizada con éxito" });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Error al cambiar la contraseña", error = ex.Message });
+            }
+        }
+
+        /// <summary>
         /// Genera una contraseña aleatoria segura con tipos de caracteres mezclados
         /// </summary>
         private string GenerarClaveSegura()
